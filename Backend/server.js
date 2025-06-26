@@ -145,42 +145,86 @@ app.post('/api/login', async (req, res) => {
 
 
 
+// app.get('/api/plants', async (req, res) => {
+//   const userId = req.headers['userid'];
+//   const role = req.headers['role'] || 'admin';
+
+//   try {
+//     if (role.toLowerCase() === 'admin') {
+//       const result = await pool.query('SELECT plantid, plantname FROM plantmaster');
+//       return res.json(result.rows);
+//     }
+
+//     // ✅ For staff: fetch allowedplants from users table
+//     const userResult = await pool.query('SELECT allowedplants FROM users WHERE userid = $1', [userId]);
+//     if (userResult.rowCount === 0) {
+//       return res.status(404).json({ error: 'User not found' });
+//     }
+
+//     const allowedPlants = userResult.rows[0].allowedplants;
+//     if (!allowedPlants || allowedPlants.trim() === '') {
+//       return res.json([]); // No access
+//     }
+
+//     // Convert "7,11" => [7, 11]
+//     const plantIdArray = allowedPlants.split(',').map(id => parseInt(id.trim())).filter(Boolean);
+
+//     const placeholders = plantIdArray.map((_, i) => `$${i + 1}`).join(',');
+//     const plantQuery = `SELECT plantid, plantname FROM plantmaster WHERE plantid IN (${placeholders})`;
+
+//     const plantResult = await pool.query(plantQuery, plantIdArray);
+//     res.json(plantResult.rows);
+
+//   } catch (error) {
+//     console.error('Error fetching plants:', error);
+//     res.status(500).json({ error: 'Error fetching plants' });
+//   }
+// });
+
+// *************888888
 app.get('/api/plants', async (req, res) => {
   const userId = req.headers['userid'];
-  const role = req.headers['role'] || 'admin';
 
   try {
-    if (role.toLowerCase() === 'admin') {
-      const result = await pool.query('SELECT plantid, plantname FROM plantmaster');
-      return res.json(result.rows);
-    }
+    // Step 1: Fetch allowedplants for any user (admin or staff)
+    const userResult = await pool.query(
+      'SELECT allowedplants FROM users WHERE userid = $1',
+      [userId]
+    );
 
-    // ✅ For staff: fetch allowedplants from users table
-    const userResult = await pool.query('SELECT allowedplants FROM users WHERE userid = $1', [userId]);
     if (userResult.rowCount === 0) {
       return res.status(404).json({ error: 'User not found' });
     }
 
     const allowedPlants = userResult.rows[0].allowedplants;
+
+    // Step 2: If allowedplants is null or empty, return no plants
     if (!allowedPlants || allowedPlants.trim() === '') {
-      return res.json([]); // No access
+      return res.json([]);
     }
 
-    // Convert "7,11" => [7, 11]
-    const plantIdArray = allowedPlants.split(',').map(id => parseInt(id.trim())).filter(Boolean);
+    // Step 3: Split into array of plant IDs
+    const plantIdArray = allowedPlants
+      .split(',')
+      .map(id => parseInt(id.trim()))
+      .filter(Boolean);
 
+    if (plantIdArray.length === 0) {
+      return res.json([]);
+    }
+
+    // Step 4: Fetch only allowed plants
     const placeholders = plantIdArray.map((_, i) => `$${i + 1}`).join(',');
     const plantQuery = `SELECT plantid, plantname FROM plantmaster WHERE plantid IN (${placeholders})`;
+    const result = await pool.query(plantQuery, plantIdArray);
 
-    const plantResult = await pool.query(plantQuery, plantIdArray);
-    res.json(plantResult.rows);
+    return res.json(result.rows);
 
   } catch (error) {
     console.error('Error fetching plants:', error);
-    res.status(500).json({ error: 'Error fetching plants' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
-
 
 
 
